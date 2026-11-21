@@ -3,7 +3,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 KEYWORDS = [
     "mt5", "mt4", "mql5", "mql4", "pine script", "pinescript",
@@ -30,31 +30,16 @@ def get_json(url):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch_reddit_pullpush():
-    out = []
-    for sub in ["algotrading", "Forex", "TradingView"]:
-        url = f"https://api.pullpush.io/reddit/search/submission/?subreddit={sub}&size=25"
-        try:
-            data = get_json(url).get("data", [])
-            for p in data:
-                eid = f"reddit_{p.get('id', '')}"
-                title = (p.get("title") or "").strip()
-                body = (p.get("selftext") or "").strip()
-                link = f"https://www.reddit.com{p.get('permalink', '')}"
-                out.append((eid, f"Reddit r/{sub}", title, link, body))
-        except Exception as exc:
-            print(f"Reddit r/{sub} skip: {exc}")
-    return out
-
-
 def fetch_stackoverflow():
     out = []
+    cutoff = int((datetime.now(timezone.utc) - timedelta(hours=48)).timestamp())
     for tag in ["mql5", "mql4", "pine-script"]:
         url = (
             "https://api.stackexchange.com/2.3/questions?"
             + urllib.parse.urlencode({
                 "order": "desc",
                 "sort": "creation",
+                "fromdate": cutoff,
                 "tagged": tag,
                 "site": "stackoverflow",
                 "pagesize": 15,
@@ -70,6 +55,20 @@ def fetch_stackoverflow():
         except Exception as exc:
             print(f"SO {tag} skip: {exc}")
     return out
+
+
+def notify_telegram(message):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=15)
+    except Exception as exc:
+        print(f"Telegram notify failed: {exc}")
 
 
 def create_issue(title, body):
@@ -95,7 +94,7 @@ def create_issue(title, body):
 
 def main():
     seen = load_seen()
-    candidates = fetch_reddit_pullpush() + fetch_stackoverflow()
+    candidates = fetch_stackoverflow()
     matches = []
 
     for eid, source, title, link, body in candidates:
@@ -119,6 +118,7 @@ def main():
                 f"Reply manually with a quick diagnostic + subtle mention of your MT4/MT5 work."
             )
             create_issue(f"[Lead] {source}: {title}", msg)
+            notify_telegram(msg)
         print(f"Logged {min(len(matches), 5)} new leads.")
     else:
         print("No new matching leads found.")
