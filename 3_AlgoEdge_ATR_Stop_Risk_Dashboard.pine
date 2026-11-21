@@ -1,0 +1,38 @@
+//@version=6
+indicator("AlgoEdge ATR Dynamic Stop & Risk Dashboard", shorttitle="AE ATR Risk", overlay=true)
+
+// ============================================================================
+// Open-Source ATR Dynamic Stop-Loss Bands & Position Risk Table
+// Built by AlgoEdge Systems — Free for TradingView Traders
+// ============================================================================
+
+atrLen      = input.int(14, "ATR Period", minval=1)
+atrMult     = input.float(1.5, "ATR Stop Multiplier", step=0.1, minval=0.5)
+rrRatio     = input.float(2.0, "Target Risk:Reward Ratio", step=0.5, minval=0.5)
+accountSize = input.float(10000.0, "Account Balance ($)", minval=100.0)
+riskPct     = input.float(1.0, "Risk Per Trade (%)", step=0.25, minval=0.1, maxval=10.0)
+
+atrVal     = ta.atr(atrLen)
+stopDist   = atrVal * atrMult
+longStop   = close - stopDist
+shortStop  = close + stopDist
+longTP     = close + (stopDist * rrRatio)
+shortTP    = close - (stopDist * rrRatio)
+riskDollar = accountSize * (riskPct / 100.0)
+
+plot(longStop, "ATR Long Stop", color=color.new(color.green, 20), linewidth=1)
+plot(shortStop, "ATR Short Stop", color=color.new(color.red, 20), linewidth=1)
+
+var table dash = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.gray)
+
+if barstate.islast
+    table.cell(dash, 0, 0, "AlgoEdge Risk Panel", text_color=color.white, bgcolor=color.new(color.teal, 20))
+    table.cell(dash, 1, 0, syminfo.ticker, text_color=color.white, bgcolor=color.new(color.teal, 20))
+    table.cell(dash, 0, 1, "ATR(" + str.tostring(atrLen) + ") Stop Dist", text_color=color.silver)
+    table.cell(dash, 1, 1, str.tostring(stopDist, format.mintick), text_color=color.white)
+    table.cell(dash, 0, 2, "Risk ($" + str.tostring(riskPct) + "%)", text_color=color.silver)
+    table.cell(dash, 1, 2, "$" + str.tostring(riskDollar, "#.##"), text_color=color.yellow)
+    table.cell(dash, 0, 3, "Long SL / TP", text_color=color.lime)
+    table.cell(dash, 1, 3, str.tostring(longStop, format.mintick) + " / " + str.tostring(longTP, format.mintick), text_color=color.white)
+    table.cell(dash, 0, 4, "Short SL / TP", text_color=color.red)
+    table.cell(dash, 1, 4, str.tostring(shortStop, format.mintick) + " / " + str.tostring(shortTP, format.mintick), text_color=color.white)

@@ -1,0 +1,54 @@
+//@version=6
+indicator("AlgoEdge ORB + 50% ADR Target Box", shorttitle="AE ORB+ADR", overlay=true, max_boxes_count=50, max_lines_count=100)
+
+// ============================================================================
+// Open-Source Opening Range Breakout (ORB) + 50% ADR(20) Target Levels
+// Built by AlgoEdge Systems — Free for TradingView Traders
+// ============================================================================
+
+orbSession = input.session("0930-0945", "Opening Range Session (Exchange Time)")
+adrLength  = input.int(20, "ADR Lookback Days", minval=5, maxval=100)
+adrMult    = input.float(0.5, "ADR Target Multiplier", step=0.1, minval=0.1, maxval=3.0)
+showAdr    = input.bool(true, "Show ADR Take-Profit Targets")
+
+// Daily ADR Calculation (non-repainting confirmed prior daily bars)
+dailyRange = request.security(syminfo.tickerid, "D", ta.sma(high - low, adrLength)[1], lookahead=barmerge.lookahead_on)
+adrTarget  = dailyRange * adrMult
+
+inOrb   = not na(time(timeframe.period, orbSession))
+newOrb  = inOrb and not inOrb[1]
+orbEnd  = not inOrb and inOrb[1]
+
+var float orbHigh = na
+var float orbLow  = na
+var int   orbStartBar = na
+var box   orbBox  = na
+
+if newOrb
+    orbHigh := high
+    orbLow  := low
+    orbStartBar := bar_index
+    orbBox := box.new(bar_index, orbHigh, bar_index, orbLow, border_color=color.new(color.teal, 0), bgcolor=color.new(color.teal, 85))
+else if inOrb
+    orbHigh := math.max(orbHigh, high)
+    orbLow  := math.min(orbLow, low)
+    if not na(orbBox)
+        box.set_top(orbBox, orbHigh)
+        box.set_bottom(orbBox, orbLow)
+        box.set_right(orbBox, bar_index)
+
+// Plot active ORB levels & ADR targets
+plot(not inOrb ? orbHigh : na, "ORB High", color=color.new(color.teal, 0), style=plot.style_linebr, linewidth=2)
+plot(not inOrb ? orbLow : na, "ORB Low", color=color.new(color.red, 0), style=plot.style_linebr, linewidth=2)
+plot(showAdr and not inOrb and not na(orbHigh) ? orbHigh + adrTarget : na, "Long ADR Target", color=color.new(color.lime, 20), style=plot.style_steplinebr)
+plot(showAdr and not inOrb and not na(orbLow) ? orbLow - adrTarget : na, "Short ADR Target", color=color.new(color.orange, 20), style=plot.style_steplinebr)
+
+// Breakout Alerts
+longBreak  = not inOrb and ta.crossover(close, orbHigh)
+shortBreak = not inOrb and ta.crossunder(close, orbLow)
+
+plotshape(longBreak, "ORB Long Breakout", shape.triangleup, location.belowbar, color.lime, size=size.small)
+plotshape(shortBreak, "ORB Short Breakout", shape.triangledown, location.abovebar, color.red, size=size.small)
+
+alertcondition(longBreak, "ORB Bullish Breakout", "Price closed above Opening Range High on {{ticker}}")
+alertcondition(shortBreak, "ORB Bearish Breakout", "Price closed below Opening Range Low on {{ticker}}")

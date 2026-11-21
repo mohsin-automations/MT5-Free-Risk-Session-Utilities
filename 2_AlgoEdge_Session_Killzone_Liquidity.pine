@@ -1,0 +1,45 @@
+//@version=6
+indicator("AlgoEdge London & NY Killzone Liquidity Boxes", shorttitle="AE Killzones", overlay=true, max_boxes_count=100)
+
+// ============================================================================
+// Open-Source London & New York Session High/Low Liquidity Boxes
+// Built by AlgoEdge Systems — Free for TradingView Traders
+// ============================================================================
+
+tz          = input.string("America/New_York", "Session Timezone", options=["America/New_York", "UTC", "Europe/London"])
+showLondon  = input.bool(true, "Show London Killzone")
+londonSess  = input.session("0200-0500", "London Session")
+showNY      = input.bool(true, "Show New York Killzone")
+nySess      = input.session("0800-1100", "New York Session")
+
+f_drawSession(bool enabled, string sess, color borderCol, color fillCol) =>
+    inSess  = enabled and not na(time(timeframe.period, sess, tz))
+    isStart = inSess and not inSess[1]
+    var float sHigh = na
+    var float sLow  = na
+    var box   sBox  = na
+    if isStart
+        sHigh := high
+        sLow  := low
+        sBox  := box.new(bar_index, sHigh, bar_index, sLow, border_color=borderCol, bgcolor=fillCol)
+    else if inSess
+        sHigh := math.max(sHigh, high)
+        sLow  := math.min(sLow, low)
+        if not na(sBox)
+            box.set_top(sBox, sHigh)
+            box.set_bottom(sBox, sLow)
+            box.set_right(sBox, bar_index)
+    [sHigh, sLow, inSess]
+
+[lonH, lonL, inLon] = f_drawSession(showLondon, londonSess, color.new(color.blue, 10), color.new(color.blue, 88))
+[nyH,  nyL,  inNY]  = f_drawSession(showNY, nySess, color.new(color.purple, 10), color.new(color.purple, 88))
+
+// Detect London High/Low sweeps during NY Session
+lonHighSweep = inNY and high > lonH and close < lonH
+lonLowSweep  = inNY and low < lonL and close > lonL
+
+plotshape(lonHighSweep, "London High Sweep", shape.labeldown, location.abovebar, color.orange, text="SWEEP", textcolor=color.white, size=size.tiny)
+plotshape(lonLowSweep, "London Low Sweep", shape.labelup, location.belowbar, color.teal, text="SWEEP", textcolor=color.white, size=size.tiny)
+
+alertcondition(lonHighSweep, "London High Liquidity Sweep", "NY session swept London High and closed back inside on {{ticker}}")
+alertcondition(lonLowSweep, "London Low Liquidity Sweep", "NY session swept London Low and closed back inside on {{ticker}}")
